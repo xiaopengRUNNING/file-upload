@@ -1,0 +1,23 @@
+{
+  "name": "file-upload",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "dependencies": {
+    "ant-design-vue": "^2.2.6",
+    "vite-plugin-components": "^0.13.2",
+    "vue": "^3.0.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^1.3.0",
+    "@vue/compiler-sfc": "^3.0.5",
+    "eslint": "^7.32.0",
+    "eslint-plugin-vue": "^7.16.0",
+    "less": "^4.1.1",
+    "less-loader": "^10.0.1",
+    "vite": "^2.4.4"
+  }
+}
