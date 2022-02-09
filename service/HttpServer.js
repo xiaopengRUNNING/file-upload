@@ -1,90 +1,142 @@
-const { fileNameTimestamp } = require('./utils/file');
-const express = require('express');
-const path = require('path');
-const fse = require('fs-extra');
-const multi = require('multiparty');
-const cors = require('cors');
+import express from 'express';
+import bodyParser from 'body-parser';
+import path, { resolve } from 'path';
+import fse from 'fs-extra';
+import multi from 'multiparty';
+import cors from 'cors';
+
 const app = express();
 
 const port = 3001;
-const UPLOAD_DIR = path.resolve(__dirname, '..', 'Upload');
-const TEMP_DIR = path.resolve(__dirname, '..', 'Temp');
-console.log(path.join(TEMP_DIR, 'text'));
+const UPLOAD_DIR = path.resolve('..', 'Upload');
 
+// 解决跨域问题
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// 获取post请求参数
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
-app.get('/index', (req, res) => {
-  res.send('hello world');
-});
+app.post('/checkFileStatus', (req, res) => {
+  new Promise((resolve, reject) => {
+    const fileHash = req.body.fileHash;
+    const fileName = req.body.fileName;
 
-app.post('/upload', (req, res) => {
-  const multiparty = new multi.Form();
+    const fileDir = path.resolve(UPLOAD_DIR, fileHash, fileName);
+    const fileHashDir = path.resolve(UPLOAD_DIR, fileHash);
 
-  multiparty.parse(req, async (err, fields, files) => {
-    if (err) {
-      return;
+    if (fse.existsSync(fileDir)) {
+      res.json({
+        code: 200,
+        message: '操作成功',
+        result: {
+          fileExists: true,
+          fileChunk: null,
+          url: path.join(fileHash, fileName)
+        },
+        success: true
+      });
+    } else if (fse.existsSync(fileHashDir)) {
+      fse.readdir(path.resolve(fileHashDir), (err, files) => {
+        if (err) {
+          reject(err);
+        } else {
+          res.json({
+            code: 200,
+            message: '操作成功',
+            result: {
+              fileExists: false,
+              fileChunk: files,
+              url: null
+            },
+            success: true
+          });
+        }
+      });
+    } else {
+      res.json({
+        code: 200,
+        messgae: '操作成功',
+        result: {
+          fileExists: false,
+          fileChunk: [],
+          url: null
+        },
+        success: true
+      });
     }
-    const fileDir = path.resolve(UPLOAD_DIR);
-
-    // 判断文件目录是否存在，不存在就创建文件目录
-    fse.ensureDir(fileDir);
-
-    // 将文件移动到最终目录
-    await fse.move(
-      files.file[0].path,
-      `${fileDir}/${fileNameTimestamp(files.file[0].originalFilename)}`
-    );
-
-    // 接口返回信息
-    res.status(200).json({
-      success: true,
-      code: 200,
-      messgae: '上传成功',
-      timestamp: new Date().getTime()
+  }).catch(err => {
+    res.json({
+      code: 500,
+      messgae: `操作失败，${err}`,
+      result: null,
+      success: false
     });
   });
 });
 
 app.post('/chunkUpload', (req, res) => {
-  const multiparty = new multi.Form();
+  new Promise((resolve, reject) => {
+    const multiparty = new multi.Form();
 
-  multiparty.parse(req, async (err, fields, files) => {
-    if (err) {
-      console.log('err =>', err);
-      return;
-    }
-    console.log('files=>', files);
-    console.log('files=>', fields);
-    // const fileDir = path.resolve(TEMP_DIR);
+    multiparty.parse(req, async (err, fields, files) => {
+      if (err) {
+        reject(err);
+      }
 
-    // // 判断文件目录是否存在，不存在就创建文件目录
-    // fse.ensureDir(fileDir);
-
-    // // 将文件移动到最终目录
-    // await fse.move(
-    //   files.file[0].path,
-    //   `${fileDir}/${files.file[0].originalFilename}`
-    // );
-
-    // 接口返回信息
-    res.status(200).json({
-      success: true,
-      code: 200,
-      messgae: '上传成功',
-      timestamp: new Date().getTime()
+      // 将文件移动到最终目录
+      fse.move(
+        files.file[0].path,
+        path.resolve(UPLOAD_DIR, fields.fileHash[0], fields.chunkIndex[0]),
+        // path.resolve(
+        //   UPLOAD_DIR,
+        //   fields.fileHash[0],
+        //   files.file[0].originalFilename
+        // ),
+        // path.resolve(UPLOAD_DIR, fields.fileHash[0], fields.fileName[0]),
+        err => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          res.json({
+            code: 200,
+            message: '上传成功',
+            return: null,
+            success: true
+          });
+        }
+      );
+    });
+  }).catch(err => {
+    res.json({
+      code: 500,
+      messgae: `操作失败，${err}`,
+      result: null,
+      success: false
     });
   });
 });
 
-app.post('/merge', (req, res) => {
-  console.log('=======================', req.body);
-
-  res.end('jjjjjj');
+app.post('/mergeFile', (req, res) => {
+  new Promise((resolve, reject) => {
+    console.log(req.body);
+    res.json({
+      code: 500,
+      messgae: '操作成功',
+      result: null,
+      success: false
+    });
+  }).catch(err => {
+    res.json({
+      code: 500,
+      messgae: `操作失败，${err}`,
+      result: null,
+      success: false
+    });
+  });
 });
 
-app.listen(port, () => console.log('正在监听 3001 端口'));
+app.listen(port, () => console.log(`正在监听 ${port} 端口`));
 
 // const server = http.createServer();
 // const UPLOAD_DIR = path.resolve(__dirname, '..', 'target');
@@ -168,4 +220,4 @@ app.listen(port, () => console.log('正在监听 3001 端口'));
 //   });
 // });
 
-// server.listen(3001, () => console.log('正在监听 3001 端口'));
+// server.listen(3000, () => console.log('正在监听 3000 端口'));

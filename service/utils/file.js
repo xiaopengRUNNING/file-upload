@@ -11,4 +11,4 @@ function fileNameTimestamp(fileName) {
   return fileNameArr.join('.') + `_${new Date().getTime()}.` + fileNameSuffix;
 }
 
-module.exports = { fileNameTimestamp };
+export default fileNameTimestamp;

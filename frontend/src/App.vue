@@ -1,60 +1,146 @@
 <template>
   <div class="file-upload-container">
-    <a-tabs v-model:activeKey="activeKey">
-      <a-tab-pane key="1" tab="普通上传">
-        <input type="file" @change="handleFileChange" />
-        <button @click="fileUpload">start</button>
-      </a-tab-pane>
-      <a-tab-pane key="2" tab="分片上传">
-        <input type="file" @change="handleFileChange" />
-        <button @click="uploadChunks">start</button>
-        <div v-if="fileChunkList.length" class="file-chunk-list">
-          <div
-            v-for="(item, index) in file
-            ChunkList"
-            :key="index"
-            class="file-chunk-item"
-          >
-            {{ index }}
-          </div>
-        </div>
-      </a-tab-pane>
-      <a-tab-pane key="3" tab="断点续传">33</a-tab-pane>
-      <template #renderTabBar="{ DefaultTabBar, ...props }">
-        <component
-          :is="DefaultTabBar"
-          v-bind="props"
-          :style="{ textAlign: 'center' }"
-        ></component>
-      </template>
-    </a-tabs>
+    <a-upload :customRequest="customRequest">
+      <a-button>Upload</a-button>
+    </a-upload>
+    <a-button @click="mergeFileChunk">mergeFile</a-button>
   </div>
 </template>
 
 <script setup>
 import { ref } from '@vue/reactivity';
+import sparkMD5 from 'spark-md5';
+import qs from 'querystring';
 
-const SIZE = 1024 * 10;
+const CHUNK_SIZE = 1024 * 100;
 const fileChunkList = ref([]);
-const file = ref({});
-const activeKey = ref('1');
+const file = ref({ name: 'roadmap-完整路线.jpeg' });
+let fileHash = ref('78d5d245e4f8298ac2f12c28e563552a');
 
-function handleFileChange(e) {
-  console.log(e);
-  if (!e.target.files.length) {
-    return;
+/**
+ * 字符串转ArrayBuffer
+ */
+const str2ab = (str, fn) => {
+  let b = new Blob([str], { type: 'text/plain:charset=utf-8' });
+  let r = new FileReader();
+  r.readAsArrayBuffer(b);
+  r.onload = e => {
+    fn(e.target.result);
+  };
+};
+
+/**
+ * 文件切片
+ */
+const fileChunk = file => {
+  let cur = 0;
+  while (cur < file.size) {
+    fileChunkList.value.push(file.slice(cur, cur + CHUNK_SIZE));
+    cur += CHUNK_SIZE;
   }
-  [file.value] = e.target.files;
-  if (!file) return;
+  console.log(fileChunkList.value);
+};
 
-  createFileChunk(file.value);
-}
+/**
+ * 计算文件切片hash值
+ */
+const fileChunkHash = file => {
+  return new Promise((resolve, reject) => {
+    let cur = 0;
+    let fileReader = new FileReader();
+    let spark = new sparkMD5.ArrayBuffer();
 
-function fileUpload() {
-  const formData = new FormData();
-  formData.append('file', file.value);
-  request({ url: 'http://localhost:3001/upload', data: formData });
-}
+    // 计算文件名hash值，防止文件相同文件名不同的情况
+    str2ab(file.name, result => {
+      spark.append(result);
+    });
+
+    fileReader.onload = e => {
+      spark.append(e.target.result);
+      if (cur <= fileChunkList.value.length - 1) {
+        calculateChunk();
+      } else {
+        resolve(spark.end());
+      }
+    };
+
+    fileReader.onerror = () => {
+      reject(new Error('文件读取失败'));
+    };
+
+    const calculateChunk = () => {
+      fileReader.readAsArrayBuffer(fileChunkList.value[cur]);
+      cur++;
+    };
+
+    calculateChunk();
+  });
+};
+
+/**
+ * 检查文件上传状态
+ *
+ * @param {String} fileHash
+ */
+const checkFileStatus = fileHash => {
+  const params = { fileHash: fileHash, fileName: file.value.name };
+  return request({
+    url: 'http://localhost:3001/checkFileStatus',
+    data: JSON.stringify(params),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
+const customRequest = e => {
+  file.value = e.file;
+
+  fileChunk(e.file);
+
+  fileChunkHash(e.file)
+    .then(result => {
+      fileHash.value = result;
+      return checkFileStatus(result);
+    })
+    .then(result => {
+      let fileStatus = JSON.parse(result.data);
+      console.log(result);
+
+      if (fileStatus.result.fileExists) {
+        return fileStatus.result.url;
+      }
+
+      const uploadList = fileChunkList.value.map((v, i) => {
+        const formData = new FormData();
+        formData.append('file', v);
+        formData.append('fileHash', result);
+        formData.append('chunkNum', fileChunkList.value.length);
+        formData.append('chunkIndex', i);
+        return request({
+          url: 'http://localhost:3001/chunkUpload',
+          data: formData
+        });
+      });
+
+      Promise.all(uploadList);
+    })
+    .catch(err => {
+      console.error(err);
+      return false;
+    });
+};
+
+const mergeFileChunk = () => {
+  const params = { fileHash: fileHash.value, fileName: file.value.name };
+  request({
+    url: 'http://localhost:3001/mergeFile',
+    data: JSON.stringify(params),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
+};
 
 function request({ url, method = 'post', data, headers = {} }) {
   return new Promise((resolve, reject) => {
@@ -77,21 +163,6 @@ function request({ url, method = 'post', data, headers = {} }) {
   });
 }
 
-function createFileChunk(file, size = SIZE) {
-  fileChunkList.value = [];
-  let cur = 0;
-  let hash = 1;
-  while (cur < file.size) {
-    fileChunkList.value.push({
-      file: file.slice(cur, cur + size),
-      hash: hash++
-    });
-    cur += size;
-  }
-  console.log(fileChunkList.value);
-}
-
-// 上传切片
 function uploadChunks() {
   asyncPool(4, fileChunkList.value, handlerUpload).then(() => {
     mergeChunks();
@@ -138,26 +209,6 @@ function asyncPool(poolLimit, array, hander) {
       return Promise.all(promises);
     });
 }
-
-// async function handleUpload() {
-//   if (!container.file) return;
-//   const fileChunkList = createFileChunk(container.file);
-//   data = fileChunkList.map(({ file }, index) => ({
-//     chunk: file,
-//     hash: container.file.name + '-' + index
-//   }));
-//   console.log(data);
-//   await uploadChunks();
-//   await mergeRequest();
-// }
-
-// async function mergeRequest() {
-//   await request({
-//     url: 'http://localhost:3001/merge',
-//     headers: { 'content-type': 'application/json' },
-//     data: JSON.stringify({ filename: container.file.name, size: SIZE })
-//   });
-// }
 </script>
 
 <style lang="less" scoped>
