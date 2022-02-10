@@ -10,7 +10,6 @@
 <script setup>
 import { ref } from '@vue/reactivity';
 import sparkMD5 from 'spark-md5';
-import qs from 'querystring';
 
 const CHUNK_SIZE = 1024 * 100;
 const fileChunkList = ref([]);
@@ -114,7 +113,7 @@ const customRequest = e => {
       const uploadList = fileChunkList.value.map((v, i) => {
         const formData = new FormData();
         formData.append('file', v);
-        formData.append('fileHash', result);
+        formData.append('fileHash', fileHash.value);
         formData.append('chunkNum', fileChunkList.value.length);
         formData.append('chunkIndex', i);
         return request({
