@@ -110,21 +110,7 @@ const customRequest = e => {
         return fileStatus.result.url;
       }
 
-      const uploadList = fileChunkList.value.map((v, i) => {
-        const formData = new FormData();
-        formData.append('file', v);
-        formData.append('fileHash', fileHash.value);
-        formData.append('chunkNum', fileChunkList.value.length);
-        formData.append('chunkIndex', i);
-        return request({
-          url: 'http://localhost:3001/chunkUpload',
-          data: formData
-        });
-      });
-
-      return Promise.all(uploadList).then(() => {
-        // 切片上传完毕后清空切片列表
-        fileChunkList.value = [];
+      asyncPool(4, fileChunkList.value, handlerChunkUpload).then(() => {
         mergeFileChunk();
       });
     })
@@ -134,6 +120,9 @@ const customRequest = e => {
     });
 };
 
+/**
+ * 切片合并
+ */
 const mergeFileChunk = () => {
   const params = {
     fileHash: fileHash.value,
@@ -148,6 +137,64 @@ const mergeFileChunk = () => {
     }
   });
 };
+
+/**
+ * 切片上传
+ *
+ * @param {File} chunk 切片文件
+ * @param {Number} index 此切片在切片数组中的索引
+ */
+const handlerChunkUpload = (chunk, index) => {
+  const formData = new FormData();
+  formData.append('file', chunk);
+  formData.append('fileHash', fileHash.value);
+  formData.append('chunkNum', fileChunkList.value.length);
+  formData.append('chunkIndex', index);
+  return request({
+    url: 'http://localhost:3001/chunkUpload',
+    data: formData
+  });
+};
+
+/**
+ * 限制异步请求最大并发数
+ *
+ * @param {Number} poolLimit
+ * @param {Array} array
+ * @param {Function} hander
+ */
+function asyncPool(poolLimit, array, hander) {
+  let sequence = [].concat(array);
+  let promises = sequence.splice(0, poolLimit).map((item, index) => {
+    return hander(item, item.hash).then(() => {
+      // 异步请求完成后返回在promises中的下标
+      return index;
+    });
+  });
+  return sequence
+    .reduce((aPromise, curr, index) => {
+      return (
+        aPromise
+          .then(() => {
+            // 返回第一个完成的异步请求在promises中的下标
+            return Promise.race(promises);
+          })
+          .then(fastIndex => {
+            // 替换已完成的异步请求
+            promises[fastIndex] = hander(curr, index).then(() => {
+              // 继续将下标返回，以便下一次遍历
+              return fastIndex;
+            });
+          })
+          // 异常捕获
+          .catch(err => console.error(err))
+      );
+    }, Promise.resolve())
+    .then(() => {
+      // 将sequence中的异步请求执行完毕后，剩下的使用.all调用
+      return Promise.all(promises);
+    });
+}
 
 function request({ url, method = 'post', data, headers = {} }) {
   return new Promise((resolve, reject) => {
@@ -168,53 +215,6 @@ function request({ url, method = 'post', data, headers = {} }) {
       reject(err);
     };
   });
-}
-
-function uploadChunks() {
-  asyncPool(4, fileChunkList.value, handlerUpload).then(() => {
-    mergeChunks();
-  });
-}
-
-async function mergeChunks() {
-  await request({
-    url: 'http://localhost:3001/merge',
-    headers: { 'content-type': 'application/json' },
-    data: JSON.stringify({ filename: file.value.name })
-  });
-}
-
-function handlerUpload(item) {
-  const formData = new FormData();
-  formData.append('file', item.file);
-  formData.append('hash', item.hash);
-  formData.append('filename', file.value.name);
-  return request({ url: 'http://localhost:3001/chunkUpload', data: formData });
-}
-
-function asyncPool(poolLimit, array, hander) {
-  let sequence = [].concat(array);
-  let promises = sequence.splice(0, poolLimit).map((item, index) => {
-    return hander(item, item.hash).then(() => {
-      return index;
-    });
-  });
-  return sequence
-    .reduce((test, curr) => {
-      return test
-        .then(() => {
-          return Promise.race(promises);
-        })
-        .then(fastesIndex => {
-          promises[fastesIndex] = hander(curr).then(() => {
-            return fastesIndex;
-          });
-        })
-        .catch(err => console.error(err));
-    }, Promise.resolve())
-    .then(() => {
-      return Promise.all(promises);
-    });
 }
 </script>
 
