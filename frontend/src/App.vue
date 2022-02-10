@@ -10,12 +10,11 @@
 <script setup>
 import { ref } from '@vue/reactivity';
 import sparkMD5 from 'spark-md5';
-import qs from 'querystring';
 
 const CHUNK_SIZE = 1024 * 100;
 const fileChunkList = ref([]);
-const file = ref({ name: 'roadmap-完整路线.jpeg' });
-let fileHash = ref('78d5d245e4f8298ac2f12c28e563552a');
+const file = ref({});
+let fileHash = ref('');
 
 /**
  * 字符串转ArrayBuffer
@@ -114,7 +113,7 @@ const customRequest = e => {
       const uploadList = fileChunkList.value.map((v, i) => {
         const formData = new FormData();
         formData.append('file', v);
-        formData.append('fileHash', result);
+        formData.append('fileHash', fileHash.value);
         formData.append('chunkNum', fileChunkList.value.length);
         formData.append('chunkIndex', i);
         return request({
@@ -123,7 +122,11 @@ const customRequest = e => {
         });
       });
 
-      Promise.all(uploadList);
+      return Promise.all(uploadList).then(() => {
+        // 切片上传完毕后清空切片列表
+        fileChunkList.value = [];
+        mergeFileChunk();
+      });
     })
     .catch(err => {
       console.error(err);
@@ -132,7 +135,11 @@ const customRequest = e => {
 };
 
 const mergeFileChunk = () => {
-  const params = { fileHash: fileHash.value, fileName: file.value.name };
+  const params = {
+    fileHash: fileHash.value,
+    fileName: file.value.name,
+    chunkSize: CHUNK_SIZE
+  };
   request({
     url: 'http://localhost:3001/mergeFile',
     data: JSON.stringify(params),
