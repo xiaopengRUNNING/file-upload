@@ -1,6 +1,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import path, { resolve } from 'path';
+import path from 'path';
 import fse from 'fs-extra';
 import multi from 'multiparty';
 import cors from 'cors';
@@ -118,13 +118,48 @@ app.post('/chunkUpload', (req, res) => {
 });
 
 app.post('/mergeFile', (req, res) => {
+  const pipeStream = (path, writeStream) => {
+    new Promise(resolve => {
+      const readStream = fse.createReadStream(path);
+      readStream.on('end', () => {
+        fse.unlinkSync(path);
+        resolve();
+      });
+      readStream.pipe(writeStream);
+    });
+  };
+
   new Promise((resolve, reject) => {
-    console.log(req.body);
-    res.json({
-      code: 500,
-      messgae: '操作成功',
-      result: null,
-      success: false
+    fse.readdir(path.resolve(UPLOAD_DIR, req.body.fileHash), (err, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        files.sort((a, b) => a - b);
+        let fileChunkList = files.map(v =>
+          path.resolve(UPLOAD_DIR, req.body.fileHash, v)
+        );
+        Promise.all(
+          fileChunkList.map((chunkPath, index) => {
+            pipeStream(
+              chunkPath,
+              fse.createWriteStream(
+                path.resolve(UPLOAD_DIR, req.body.fileHash, req.body.fileName),
+                {
+                  start: index * req.body.chunkSize,
+                  end: (index + 1) * req.body.chunkSize
+                }
+              )
+            );
+          })
+        ).then(() => {
+          res.json({
+            code: 200,
+            messgae: '操作成功',
+            result: path.join(req.body.fileHash, req.body.fileName),
+            success: false
+          });
+        });
+      }
     });
   }).catch(err => {
     res.json({
@@ -137,87 +172,3 @@ app.post('/mergeFile', (req, res) => {
 });
 
 app.listen(port, () => console.log(`正在监听 ${port} 端口`));
-
-// const server = http.createServer();
-// const UPLOAD_DIR = path.resolve(__dirname, '..', 'target');
-
-// const resolvePost = req =>
-//   new Promise(resolve => {
-//     let chunk = '';
-//     req.on('data', data => {
-//       chunk += data;
-//     });
-//     req.on('end', () => {
-//       resolve(JSON.parse(chunk));
-//     });
-//   });
-
-// const pipeStream = (path, writeStream) => {
-//   new Promise(resolve => {
-//     const readStream = fse.createReadStream(path);
-//     readStream.on('end', () => {
-//       fse.unlinkSync(path);
-//       resolve();
-//     });
-//     readStream.pipe(writeStream);
-//   });
-// };
-
-// const mergeFileChunk = async (filePath, filename, size) => {
-//   const chunkDir = path.resolve(UPLOAD_DIR);
-//   const chunkPaths = await fse.readdir(chunkDir);
-//   chunkPaths.sort((a, b) => a.split('-')[0] - b.split('-'[1]));
-//   await Promise.all(
-//     chunkPaths.map((chunkPath, index) => {
-//       pipeStream(
-//         path.resolve(chunkDir, chunkPath),
-//         fse.createWriteStream(filePath, { start: index * size, end: (index + 1) * size })
-//       );
-//     })
-//   );
-//   // fse.rmdirSync(chunkDir);
-// };
-
-// server.on('request', async (req, res) => {
-//   res.setHeader('Access-Control-Allow-Origin', '*');
-//   res.setHeader('Access-Control-Allow-Headers', '*');
-
-//   if (req.method === 'OPTIONS') {
-//     res.status = 200;
-//     res.end();
-//     return;
-//   }
-
-//   if (req.url === '/merge') {
-//     const data = await resolvePost(req);
-//     const { filename, size } = data;
-//     const filePath = path.resolve(UPLOAD_DIR, `${filename}`);
-//     await mergeFileChunk(filePath, filename, size);
-//     res.end(
-//       JSON.stringify({
-//         code: 0,
-//         message: 'file merged success'
-//       })
-//     );
-//   }
-
-//   const multiparty1 = new multiparty.Form();
-
-//   multiparty1.parse(req, async (err, fields, files) => {
-//     if (err) {
-//       return;
-//     }
-//     const [chunk] = files.chunk;
-//     const [hash] = fields.hash;
-//     const [filename] = fields.filename;
-//     const chunkDir = path.resolve(UPLOAD_DIR);
-
-//     if (!fse.existsSync(chunkDir)) {
-//       await fse.mkdirs(chunkDir);
-//     }
-//     await fse.move(chunk.path, `${chunkDir}/${hash}`);
-//     res.end('received file chunk');
-//   });
-// });
-
-// server.listen(3000, () => console.log('正在监听 3000 端口'));
