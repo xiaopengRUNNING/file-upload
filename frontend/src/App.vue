@@ -1,9 +1,8 @@
 <template>
   <div class="file-upload-container">
-    <a-upload :customRequest="customRequest">
+    <a-upload :showUploadList="false" :customRequest="customRequest">
       <a-button>Upload</a-button>
     </a-upload>
-    <a-button @click="mergeFileChunk">mergeFile</a-button>
   </div>
 </template>
 
@@ -63,6 +62,10 @@ const fileChunkHash = file => {
       }
     };
 
+    fileReader.onprogress = e => {
+      // console.log(e);
+    };
+
     fileReader.onerror = () => {
       reject(new Error('文件读取失败'));
     };
@@ -104,7 +107,7 @@ const customRequest = e => {
     })
     .then(result => {
       let fileStatus = JSON.parse(result.data);
-      console.log(result);
+      console.log(fileStatus);
 
       if (fileStatus.result.fileExists) {
         return fileStatus.result.url;
@@ -166,7 +169,7 @@ const handlerChunkUpload = (chunk, index) => {
 function asyncPool(poolLimit, array, hander) {
   let sequence = [].concat(array);
   let promises = sequence.splice(0, poolLimit).map((item, index) => {
-    return hander(item, item.hash).then(() => {
+    return hander(item, index).then(() => {
       // 异步请求完成后返回在promises中的下标
       return index;
     });
@@ -181,7 +184,7 @@ function asyncPool(poolLimit, array, hander) {
           })
           .then(fastIndex => {
             // 替换已完成的异步请求
-            promises[fastIndex] = hander(curr, index).then(() => {
+            promises[fastIndex] = hander(curr, index + poolLimit).then(() => {
               // 继续将下标返回，以便下一次遍历
               return fastIndex;
             });
@@ -200,7 +203,7 @@ function request({ url, method = 'post', data, headers = {} }) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
-    xhr.timeout = 9000;
+    xhr.timeout = 60000;
     Object.keys(headers).forEach(key => {
       xhr.setRequestHeader(key, headers[key]);
     });
@@ -222,7 +225,6 @@ function request({ url, method = 'post', data, headers = {} }) {
 .file-upload-container {
   margin: auto;
   max-width: 66%;
-  min-width: 840px;
 }
 .file-chunk-list {
   display: flex;
