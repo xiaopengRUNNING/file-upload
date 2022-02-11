@@ -33,7 +33,10 @@ const str2ab = (str, fn) => {
 const fileChunk = file => {
   let cur = 0;
   while (cur < file.size) {
-    fileChunkList.value.push(file.slice(cur, cur + CHUNK_SIZE));
+    fileChunkList.value.push({
+      chunk: file.slice(cur, cur + CHUNK_SIZE),
+      chunkIndex: cur / CHUNK_SIZE
+    });
     cur += CHUNK_SIZE;
   }
   console.log(fileChunkList.value);
@@ -71,7 +74,7 @@ const fileChunkHash = file => {
     };
 
     const calculateChunk = () => {
-      fileReader.readAsArrayBuffer(fileChunkList.value[cur]);
+      fileReader.readAsArrayBuffer(fileChunkList.value[cur].chunk);
       cur++;
     };
 
@@ -113,7 +116,16 @@ const customRequest = e => {
         return fileStatus.result.url;
       }
 
-      asyncPool(4, fileChunkList.value, handlerChunkUpload).then(() => {
+      // 过滤未上传的切片
+      let noExistChunkList = fileStatus.result.fileChunk.length
+        ? fileChunkList.value.filter(
+            v => !fileStatus.result.fileChunk.includes(v.chunkIndex + '')
+          )
+        : fileChunkList.value;
+
+      console.log(noExistChunkList);
+
+      asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
         mergeFileChunk();
       });
     })
@@ -169,13 +181,13 @@ const handlerChunkUpload = (chunk, index) => {
 function asyncPool(poolLimit, array, hander) {
   let sequence = [].concat(array);
   let promises = sequence.splice(0, poolLimit).map((item, index) => {
-    return hander(item, index).then(() => {
+    return hander(item.chunk, item.chunkIndex).then(() => {
       // 异步请求完成后返回在promises中的下标
       return index;
     });
   });
   return sequence
-    .reduce((aPromise, curr, index) => {
+    .reduce((aPromise, curr) => {
       return (
         aPromise
           .then(() => {
@@ -184,10 +196,12 @@ function asyncPool(poolLimit, array, hander) {
           })
           .then(fastIndex => {
             // 替换已完成的异步请求
-            promises[fastIndex] = hander(curr, index + poolLimit).then(() => {
-              // 继续将下标返回，以便下一次遍历
-              return fastIndex;
-            });
+            promises[fastIndex] = hander(curr.chunk, curr.chunkIndex).then(
+              () => {
+                // 继续将下标返回，以便下一次遍历
+                return fastIndex;
+              }
+            );
           })
           // 异常捕获
           .catch(err => console.error(err))
