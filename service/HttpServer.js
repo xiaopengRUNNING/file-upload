@@ -80,7 +80,7 @@ app.post('/chunkUpload', (req, res) => {
 
     multiparty.parse(req, async (err, fields, files) => {
       if (err) {
-        reject(err);
+        return reject(err);
       }
 
       // 将文件移动到最终目录
@@ -160,6 +160,46 @@ app.post('/mergeFile', (req, res) => {
           });
         });
       }
+    });
+  }).catch(err => {
+    res.json({
+      code: 500,
+      messgae: `操作失败，${err}`,
+      result: null,
+      success: false
+    });
+  });
+});
+
+app.post('/upload', (req, res) => {
+  new Promise((resolve, reject) => {
+    const multiparty = new multi.Form();
+
+    multiparty.parse(req, (err, fields, files) => {
+      if (err) {
+        return reject(err);
+      }
+
+      // 将文件移动到最终目录
+      fse.move(
+        files.file[0].path,
+        path.resolve(
+          UPLOAD_DIR,
+          fields.fileHash[0],
+          files.file[0].originalFilename
+        ),
+        err => {
+          if (err) {
+            return reject(err);
+          }
+          res.json({
+            code: 200,
+            message: '上传成功',
+            return: null,
+            success: true
+          });
+        }
+      );
     });
   }).catch(err => {
     res.json({
