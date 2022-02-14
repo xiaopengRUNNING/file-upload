@@ -38,7 +38,7 @@ const calculateProgress = () => {
   const ele = document.getElementsByClassName('progress');
 
   const animation = () => {
-    const requestId = window.requestAnimationFrame(test);
+    const requestId = window.requestAnimationFrame(animation);
     ele[0].style.width = `${fileProgress.value}%`;
 
     if (fileProgress.value >= 100) {
