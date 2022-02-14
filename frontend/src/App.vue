@@ -3,6 +3,23 @@
     <a-upload :showUploadList="false" :customRequest="customRequest">
       <a-button>Upload</a-button>
     </a-upload>
+    <div>
+      是否切片上传：<a-switch
+        size="small"
+        :checked="isChunk"
+        @change="uploadModeChange"
+      />
+    </div>
+    <div>
+      <a-progress
+        :percent="fileProgress"
+        style="width: 200px"
+        :showInfo="false"
+      ></a-progress>
+    </div>
+    <div class="file-upload-progress">
+      <div class="progress"></div>
+    </div>
   </div>
 </template>
 
@@ -13,7 +30,28 @@ import sparkMD5 from 'spark-md5';
 const CHUNK_SIZE = 1024 * 100;
 const fileChunkList = ref([]);
 const file = ref({});
+const fileProgress = ref();
+const isChunk = ref(true);
 let fileHash = ref('');
+
+const calculateProgress = () => {
+  const ele = document.getElementsByClassName('progress');
+
+  const animation = () => {
+    const requestId = window.requestAnimationFrame(test);
+    ele[0].style.width = `${fileProgress.value}%`;
+
+    if (fileProgress.value >= 100) {
+      window.cancelAnimationFrame(requestId);
+    }
+  };
+
+  animation();
+};
+
+const uploadModeChange = checked => {
+  isChunk.value = checked;
+};
 
 /**
  * 字符串转ArrayBuffer
@@ -116,18 +154,21 @@ const customRequest = e => {
         return fileStatus.result.url;
       }
 
-      // 过滤未上传的切片
-      let noExistChunkList = fileStatus.result.fileChunk.length
-        ? fileChunkList.value.filter(
-            v => !fileStatus.result.fileChunk.includes(v.chunkIndex + '')
-          )
-        : fileChunkList.value;
+      if (isChunk.value) {
+        // 过滤未上传的切片
+        let noExistChunkList = fileStatus.result.fileChunk.length
+          ? fileChunkList.value.filter(
+              v => !fileStatus.result.fileChunk.includes(v.chunkIndex + '')
+            )
+          : fileChunkList.value;
 
-      console.log(noExistChunkList);
-
-      asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
-        mergeFileChunk();
-      });
+        asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
+          mergeFileChunk();
+        });
+      } else {
+        handerFileUpload(e.file, fileHash.value);
+        calculateProgress();
+      }
     })
     .catch(err => {
       console.error(err);
@@ -167,6 +208,21 @@ const handlerChunkUpload = (chunk, index) => {
   formData.append('chunkIndex', index);
   return request({
     url: 'http://localhost:3001/chunkUpload',
+    data: formData
+  });
+};
+
+/**
+ * 文件上传
+ *
+ * @param {File} chunk 文件信息
+ */
+const handerFileUpload = (file, fileHash) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('fileHash', fileHash);
+  return request({
+    url: 'http://localhost:3001/upload',
     data: formData
   });
 };
@@ -221,6 +277,10 @@ function request({ url, method = 'post', data, headers = {} }) {
     Object.keys(headers).forEach(key => {
       xhr.setRequestHeader(key, headers[key]);
     });
+    xhr.upload.onprogress = e => {
+      let percentage = e.loaded / e.total;
+      fileProgress.value = percentage * 100;
+    };
     xhr.send(data);
     xhr.onload = e => {
       console.log(e);
@@ -236,6 +296,18 @@ function request({ url, method = 'post', data, headers = {} }) {
 </script>
 
 <style lang="less" scoped>
+.file-upload-progress {
+  height: 32px;
+  width: 200px;
+  border: 1px solid black;
+  margin: auto;
+
+  .progress {
+    height: 100%;
+    width: 0;
+    background-color: black;
+  }
+}
 .file-upload-container {
   margin: auto;
   max-width: 66%;
