@@ -54,6 +54,7 @@ const uploadModeChange = checked => {
   isChunk.value = checked;
 };
 
+// 更新文件分片进度条
 const calculateProgress = () => {
   const ele = document.getElementsByClassName('chunk-progress');
 
@@ -170,27 +171,40 @@ const customRequest = e => {
     })
     .then(result => {
       let fileStatus = JSON.parse(result.data);
+      let uploadedChunkIndex = fileStatus.result.fileChunk;
+
       console.log(fileStatus);
 
+      // 文件已上传
       if (fileStatus.result.fileExists) {
         return fileStatus.result.url;
       }
 
       if (isChunk.value) {
         // 过滤未上传的切片
-        let noExistChunkList = fileStatus.result.fileChunk.length
-          ? fileChunkList.value.filter(
-              v => !fileStatus.result.fileChunk.includes(v.chunkIndex + '')
-            )
-          : fileChunkList.value;
+        let noExistChunkList = [];
 
+        // 有已上传的分片
+        if (uploadedChunkIndex && uploadedChunkIndex.length) {
+          fileChunkList.value.forEach(v => {
+            if (!uploadedChunkIndex.includes(v.chunkIndex + '')) {
+              noExistChunkList.push(v);
+            } else {
+              // 将已上传的分片进度设为100
+              v.progress = 100;
+            }
+          });
+        } else {
+          noExistChunkList = fileChunkList.value;
+        }
+
+        calculateProgress();
         asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
           mergeFileChunk();
         });
-        calculateProgress();
       } else {
-        handerFileUpload(e.file, fileHash.value);
         calculateProgress();
+        handerFileUpload(e.file, fileHash.value);
       }
     })
     .catch(err => {
