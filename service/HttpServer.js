@@ -45,7 +45,7 @@ app.post('/checkFileStatus', (req, res) => {
             message: '操作成功',
             result: {
               fileExists: false,
-              fileChunk: files,
+              fileChunk: files.filter(v => !v.startsWith('.')),
               url: null
             },
             success: true
@@ -135,9 +135,12 @@ app.post('/mergeFile', (req, res) => {
         reject(err);
       } else {
         files.sort((a, b) => a - b);
-        let fileChunkList = files.map(v =>
-          path.resolve(UPLOAD_DIR, req.body.fileHash, v)
-        );
+        let fileChunkList = [];
+        files.forEach(v => {
+          if (!v.startsWith('.')) {
+            fileChunkList.push(path.resolve(UPLOAD_DIR, req.body.fileHash, v));
+          }
+        });
         Promise.all(
           fileChunkList.map((chunkPath, index) => {
             pipeStream(
