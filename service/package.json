@@ -1,5 +1,8 @@
 {
   "type": "module",
+  "scripts": {
+    "serve": "node HttpServer.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.17.1",
