@@ -1,8 +1,13 @@
 <template>
   <div class="file-upload-container">
-    <a-upload :showUploadList="false" :customRequest="customRequest">
+    <a-upload
+      :showUploadList="false"
+      :beforeUpload="beforeUpload"
+      @change="uploadFileChange"
+    >
       <a-button>Upload</a-button>
     </a-upload>
+    <a class="start-upload-button" @click="customRequest">开始上传</a>
     <div class="file-upload-mode">
       是否切片上传：<a-switch
         size="small"
@@ -52,6 +57,16 @@ let fileHash = ref('');
 
 const uploadModeChange = checked => {
   isChunk.value = checked;
+};
+
+const beforeUpload = () => {
+  return false;
+};
+
+const uploadFileChange = fileInfo => {
+  file.value = fileInfo.file;
+
+  fileChunk(file.value);
 };
 
 // 更新文件分片进度条
@@ -159,12 +174,10 @@ const checkFileStatus = fileHash => {
   });
 };
 
-const customRequest = e => {
-  file.value = e.file;
+const customRequest = () => {
+  // fileChunk(e.file);
 
-  fileChunk(e.file);
-
-  fileChunkHash(e.file)
+  fileChunkHash(file.value)
     .then(result => {
       fileHash.value = result;
       return checkFileStatus(result);
@@ -204,7 +217,7 @@ const customRequest = e => {
         });
       } else {
         calculateProgress();
-        handerFileUpload(e.file, fileHash.value);
+        handerFileUpload(file.value, fileHash.value);
       }
     })
     .catch(err => {
@@ -345,6 +358,9 @@ function request({
   margin: auto;
   max-width: 66%;
 
+  .start-upload-button {
+    margin-left: 8px;
+  }
   .file-upload-mode {
     margin: 8px 0px;
   }
@@ -368,6 +384,7 @@ function request({
       width: 30px;
       height: 30px;
       background-color: red;
+      border-radius: 4px;
       margin: 0px 4px 4px 0px;
       display: flex;
       justify-content: center;
@@ -378,6 +395,7 @@ function request({
         height: 100%;
         width: 0%;
         background-color: blue;
+        border-radius: 4px;
         position: absolute;
         left: 0px;
       }
