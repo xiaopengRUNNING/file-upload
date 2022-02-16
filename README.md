@@ -2,6 +2,8 @@
 
 Vue3 + Node 实现大文件上传
 
+
+
 ## 启动node服务
 
 ```
@@ -9,7 +11,7 @@ cd service
 
 yarn
 
-node HttpServer
+yarn serve
 ```
 
 ## 启动前端
