@@ -3,7 +3,10 @@ export default function request({
   method = 'post',
   data,
   headers = {},
-  onProgress = e => e
+  onProgress = e => e,
+  onloadstart = e => e,
+  onload = e => e,
+  onerror = e => e
 }) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -12,15 +15,17 @@ export default function request({
     Object.keys(headers).forEach(key => {
       xhr.setRequestHeader(key, headers[key]);
     });
+    xhr.onloadstart = onloadstart;
     xhr.upload.onprogress = onProgress;
     xhr.send(data);
     xhr.onload = e => {
-      console.log(e);
+      onload();
       resolve({
         data: e.target.response
       });
     };
     xhr.onerror = err => {
+      onerror();
       reject(err);
     };
   });
