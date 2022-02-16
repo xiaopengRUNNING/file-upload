@@ -8,6 +8,7 @@
       <a-button>Upload</a-button>
     </a-upload>
     <a class="start-upload-button" @click="customRequest">开始上传</a>
+    <div class="err-tip" v-if="showError">请先选择上传文件！</div>
     <div class="file-upload-mode">
       是否切片上传：<a-switch
         size="small"
@@ -34,7 +35,6 @@
 </template>
 
 <script setup>
-import { message } from 'ant-design-vue';
 import { ref } from '@vue/reactivity';
 import sparkMD5 from 'spark-md5';
 import request from './utils/request';
@@ -46,6 +46,7 @@ const fileChunkList = ref([]);
 const file = ref({});
 const isChunk = ref(true);
 const fileHash = ref('');
+const showError = ref(false);
 let selectFile = false;
 
 const uploadModeChange = checked => {
@@ -58,6 +59,7 @@ const beforeUpload = () => {
 
 const uploadFileChange = fileInfo => {
   selectFile = true;
+  showError.value = false;
   file.value = fileInfo.file;
 
   fileChunk(file.value);
@@ -167,7 +169,7 @@ const checkFileStatus = fileHash => {
 
 const customRequest = () => {
   if (!selectFile) {
-    message.warning('请选择上传文件！');
+    showError.value = true;
     return;
   }
 
@@ -337,6 +339,9 @@ function asyncPool(poolLimit, array, hander) {
 
   .start-upload-button {
     margin-left: 8px;
+  }
+  .err-tip {
+    color: red;
   }
   .file-upload-mode {
     margin: 8px 0px;
