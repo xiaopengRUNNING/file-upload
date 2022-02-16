@@ -16,7 +16,7 @@
       />
     </div>
     <div class="file-upload-progress">
-      <div class="progress"></div>
+      <div class="total-progress"></div>
     </div>
     <div class="file-chunk-list" v-if="isChunk">
       <div
@@ -25,13 +25,16 @@
         :key="index"
       >
         <div class="chunk-progress"></div>
-        <Loading></Loading>
+        <Loading
+          v-show="['start', 'uploading'].includes(item.status)"
+        ></Loading>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { message } from 'ant-design-vue';
 import { ref } from '@vue/reactivity';
 import sparkMD5 from 'spark-md5';
 import request from './utils/request';
@@ -41,9 +44,9 @@ import { str2ab } from './utils/string';
 const CHUNK_SIZE = 1024 * 100;
 const fileChunkList = ref([]);
 const file = ref({});
-const fileProgress = ref();
 const isChunk = ref(true);
-let fileHash = ref('');
+const fileHash = ref('');
+let selectFile = false;
 
 const uploadModeChange = checked => {
   isChunk.value = checked;
@@ -54,6 +57,7 @@ const beforeUpload = () => {
 };
 
 const uploadFileChange = fileInfo => {
+  selectFile = true;
   file.value = fileInfo.file;
 
   fileChunk(file.value);
@@ -69,9 +73,17 @@ const calculateProgress = () => {
       .filter(v => v.progress !== 0)
       .map(v => {
         ele[v.chunkIndex].style.width = `${v.progress}%`;
+        if (v.status === 'success') {
+          ele[v.chunkIndex].style.backgroundColor = '#52C41A';
+        }
+        if (v.status === 'error') {
+          ele[v.chunkIndex].style.backgroundColor = '#f5222d';
+        }
       });
 
-    if (fileChunkList.value.every(v => v.progress === 100)) {
+    if (
+      fileChunkList.value.every(v => ['success', 'error'].includes(v.status))
+    ) {
       window.cancelAnimationFrame(requestId);
     }
   };
@@ -88,7 +100,8 @@ const fileChunk = file => {
     fileChunkList.value.push({
       chunk: file.slice(cur, cur + CHUNK_SIZE),
       chunkIndex: cur / CHUNK_SIZE,
-      status: 'loading',
+      // 'init', 'start', 'uploading', 'error', 'success'
+      status: 'init',
       progress: 0
     });
     cur += CHUNK_SIZE;
@@ -120,7 +133,7 @@ const fileChunkHash = file => {
     };
 
     fileReader.onprogress = e => {
-      // console.log(e);
+      console.log(e);
     };
 
     fileReader.onerror = () => {
@@ -153,7 +166,10 @@ const checkFileStatus = fileHash => {
 };
 
 const customRequest = () => {
-  // fileChunk(e.file);
+  if (!selectFile) {
+    message.warning('请选择上传文件！');
+    return;
+  }
 
   fileChunkHash(file.value)
     .then(result => {
@@ -183,6 +199,7 @@ const customRequest = () => {
             } else {
               // 将已上传的分片进度设为100
               v.progress = 100;
+              v.status = 'success';
             }
           });
         } else {
@@ -237,12 +254,22 @@ const handlerChunkUpload = record => {
   return request({
     url: 'http://localhost:3001/chunkUpload',
     data: formData,
-    onProgress: saveChunkProgress(record)
+    onProgress: saveChunkProgress(record),
+    onloadstart: () => {
+      record.status = 'start';
+    },
+    onload: () => {
+      record.status = 'success';
+    },
+    onerror: () => {
+      record.status = 'error';
+    }
   });
 };
 
 const saveChunkProgress = chunkRecord => {
   return e => {
+    chunkRecord.status = 'uploading';
     chunkRecord.progress = (e.loaded / e.total) * 100;
   };
 };
@@ -333,7 +360,7 @@ function asyncPool(poolLimit, array, hander) {
     .file-chunk-item {
       width: 30px;
       height: 30px;
-      background-color: red;
+      border: 2px solid #999;
       border-radius: 4px;
       margin: 0px 4px 4px 0px;
       display: flex;
@@ -344,8 +371,7 @@ function asyncPool(poolLimit, array, hander) {
       .chunk-progress {
         height: 100%;
         width: 0%;
-        background-color: blue;
-        border-radius: 4px;
+        background-color: #1890ff;
         position: absolute;
         left: 0px;
       }
