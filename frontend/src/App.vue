@@ -1,5 +1,5 @@
 <template>
-  <div class="file-upload-container">
+  <div class="main-container">
     <a-upload
       :showUploadList="false"
       :beforeUpload="beforeUpload"
@@ -10,25 +10,33 @@
     <a class="start-upload-button" @click="customRequest">开始上传</a>
     <div class="err-tip" v-if="showError">请先选择上传文件！</div>
     <div class="file-upload-mode">
-      是否切片上传：<a-switch
+      是否切片上传：
+      <a-switch
+        class="file-upload-mode-switch"
         size="small"
         :checked="isChunk"
         @change="uploadModeChange"
       />
     </div>
-    <div class="file-upload-progress">
-      <div class="total-progress"></div>
+    <div class="file-chunk-upload-container flex-container" v-if="isChunk">
+      <div class="file-chunk-label">切片上传进度：</div>
+      <div class="file-chunk-list">
+        <div
+          class="file-chunk-item"
+          v-for="(item, index) in fileChunkList"
+          :key="index"
+        >
+          <div class="chunk-progress"></div>
+          <Loading
+            v-show="['start', 'uploading'].includes(item.status)"
+          ></Loading>
+        </div>
+      </div>
     </div>
-    <div class="file-chunk-list" v-if="isChunk">
-      <div
-        class="file-chunk-item"
-        v-for="(item, index) in fileChunkList"
-        :key="index"
-      >
-        <div class="chunk-progress"></div>
-        <Loading
-          v-show="['start', 'uploading'].includes(item.status)"
-        ></Loading>
+    <div class="file-upload-container flex-container">
+      文件上传进度：
+      <div class="file-upload-progress">
+        <div class="total-progress"></div>
       </div>
     </div>
   </div>
@@ -333,54 +341,70 @@ function asyncPool(poolLimit, array, hander) {
 </script>
 
 <style lang="less" scoped>
-.file-upload-container {
+.main-container {
+  width: 608px;
+  max-width: 100%;
   margin: auto;
-  max-width: 66%;
+  text-align: left;
 
   .start-upload-button {
     margin-left: 8px;
   }
   .err-tip {
     color: red;
+    margin-top: 4px;
   }
   .file-upload-mode {
     margin: 8px 0px;
-  }
-  .file-upload-progress {
-    height: 32px;
-    width: 200px;
-    border: 1px solid black;
-    margin: auto;
 
-    .progress {
-      height: 100%;
-      width: 0;
-      background-color: black;
+    .file-upload-mode-switch {
+      margin-top: -2px;
     }
   }
-  .file-chunk-list {
-    display: flex;
-    flex-wrap: wrap;
-
-    .file-chunk-item {
-      width: 30px;
-      height: 30px;
-      border: 2px solid #999;
-      border-radius: 4px;
-      margin: 0px 4px 4px 0px;
+  .file-chunk-upload-container {
+    .file-chunk-list {
+      flex: 1;
       display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
+      flex-wrap: wrap;
+      .file-chunk-item {
+        width: 30px;
+        height: 30px;
+        border: 2px solid #999;
+        border-radius: 4px;
+        margin: 0px 4px 4px 0px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
 
-      .chunk-progress {
-        height: 100%;
-        width: 0%;
-        background-color: #1890ff;
-        position: absolute;
-        left: 0px;
+        .chunk-progress {
+          height: 100%;
+          width: 0%;
+          background-color: #1890ff;
+          position: absolute;
+          left: 0px;
+        }
       }
     }
+  }
+  .file-upload-container {
+    .file-upload-progress {
+      flex: 1;
+      height: 32px;
+      border: 2px solid #999;
+      border-radius: 4px;
+      margin-right: 4px;
+
+      .progress {
+        height: 100%;
+        width: 0;
+        background-color: black;
+      }
+    }
+  }
+  .flex-container {
+    display: flex;
+    margin: 8px 0px;
   }
 }
 </style>
