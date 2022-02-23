@@ -18,7 +18,10 @@
         @change="uploadModeChange"
       />
     </div>
-    <div class="file-chunk-upload-container flex-container" v-if="isChunk">
+    <div
+      class="file-chunk-upload-container flex-container"
+      v-if="isChunk && !isEmptyObject(file)"
+    >
       <div class="file-chunk-label">切片上传进度：</div>
       <div class="file-chunk-list">
         <div
@@ -55,7 +58,6 @@ const file = ref({});
 const isChunk = ref(true);
 const fileHash = ref('');
 const showError = ref(false);
-let selectFile = false;
 
 const uploadModeChange = checked => {
   isChunk.value = checked;
@@ -66,7 +68,6 @@ const beforeUpload = () => {
 };
 
 const uploadFileChange = fileInfo => {
-  selectFile = true;
   showError.value = false;
   file.value = fileInfo.file;
 
@@ -176,7 +177,7 @@ const checkFileStatus = fileHash => {
 };
 
 const customRequest = () => {
-  if (!selectFile) {
+  if (isEmptyObject(file.value)) {
     showError.value = true;
     return;
   }
@@ -337,6 +338,16 @@ function asyncPool(poolLimit, array, hander) {
       // 将sequence中的异步请求执行完毕后，剩下的使用.all调用
       return Promise.all(promises);
     });
+}
+
+/**
+ * 判断是否为空对象
+ */
+function isEmptyObject(obj) {
+  if (Object.prototype.toString.call({}) !== '[object Object]') {
+    return false;
+  }
+  return Object.keys(obj).length ? false : true;
 }
 </script>
 
