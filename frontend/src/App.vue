@@ -29,7 +29,7 @@
           v-for="(item, index) in fileChunkList"
           :key="index"
         >
-          <div class="chunk-progress"></div>
+          <div class="chunk-progress progress"></div>
           <Loading
             v-show="['start', 'uploading'].includes(item.status)"
           ></Loading>
@@ -39,7 +39,7 @@
     <div class="file-upload-container flex-container">
       文件上传进度：
       <div class="file-upload-progress">
-        <div class="total-progress"></div>
+        <div class="total-progress progress"></div>
       </div>
     </div>
   </div>
@@ -52,11 +52,17 @@ import request from './utils/request';
 import Loading from './components/Loading.vue';
 import { str2ab } from './utils/string';
 
+// 切片大小
 const CHUNK_SIZE = 1024 * 100;
+// 文件分片数组
 const fileChunkList = ref([]);
+// 文件信息
 const file = ref({});
+// 是否分钱上传
 const isChunk = ref(true);
+// 文件md5值
 const fileHash = ref('');
+// 是否显示错误信息
 const showError = ref(false);
 
 const uploadModeChange = checked => {
@@ -70,31 +76,43 @@ const beforeUpload = () => {
 const uploadFileChange = fileInfo => {
   showError.value = false;
   file.value = fileInfo.file;
-
   fileChunk(file.value);
 };
 
 // 更新文件分片进度条
 const calculateProgress = () => {
   const ele = document.getElementsByClassName('chunk-progress');
+  const totalPorgress = document.getElementsByClassName('total-progress')[0];
 
   const animation = () => {
     const requestId = window.requestAnimationFrame(animation);
+    // 文件已上传大小
+    let uploadedSize = 0;
+
+    // 处理分片上传进度条
     fileChunkList.value
       .filter(v => v.progress !== 0)
       .map(v => {
         ele[v.chunkIndex].style.width = `${v.progress}%`;
         if (v.status === 'success') {
-          ele[v.chunkIndex].style.backgroundColor = '#52C41A';
+          ele[v.chunkIndex].classList.add('success');
+          // ele[v.chunkIndex].style.backgroundColor = '#52C41A';
         }
         if (v.status === 'error') {
-          ele[v.chunkIndex].style.backgroundColor = '#f5222d';
+          ele[v.chunkIndex].classList.add('error');
+          // ele[v.chunkIndex].style.backgroundColor = '#f5222d';
         }
+
+        uploadedSize = uploadedSize + (v.chunk.size * v.progress) / 100;
       });
+
+    // 计算整个文件上传进度
+    totalPorgress.style.width = `${(uploadedSize / file.value.size) * 100}%`;
 
     if (
       fileChunkList.value.every(v => ['success', 'error'].includes(v.status))
     ) {
+      totalPorgress.classList.add('success');
       window.cancelAnimationFrame(requestId);
     }
   };
@@ -190,8 +208,6 @@ const customRequest = () => {
     .then(result => {
       let fileStatus = JSON.parse(result.data);
       let uploadedChunkIndex = fileStatus.result.fileChunk;
-
-      console.log(fileStatus);
 
       // 文件已上传
       if (fileStatus.result.fileExists) {
@@ -389,9 +405,6 @@ function isEmptyObject(obj) {
         position: relative;
 
         .chunk-progress {
-          height: 100%;
-          width: 0%;
-          background-color: #1890ff;
           position: absolute;
           left: 0px;
         }
@@ -406,16 +419,24 @@ function isEmptyObject(obj) {
       border-radius: 4px;
       margin-right: 4px;
 
-      .progress {
-        height: 100%;
-        width: 0;
-        background-color: black;
+      .total-progress {
       }
     }
   }
   .flex-container {
     display: flex;
     margin: 8px 0px;
+  }
+}
+.progress {
+  height: 100%;
+  width: 0;
+  background-color: #1890ff;
+  &.success {
+    background-color: #52c41a;
+  }
+  &.error {
+    background-color: #f5222d;
   }
 }
 </style>
