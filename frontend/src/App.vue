@@ -7,7 +7,9 @@
     >
       <a-button>Upload</a-button>
     </a-upload>
-    <a class="start-upload-button" @click="customRequest">开始上传</a>
+    <a class="start-upload-button" @click="customRequest" :disabled="uploading"
+      >开始上传</a
+    >
     <div class="err-tip" v-if="showError">请先选择上传文件！</div>
     <div class="file-upload-mode">
       是否切片上传：
@@ -39,6 +41,7 @@
     <div class="file-upload-container flex-container">
       文件上传进度：
       <div class="file-upload-progress">
+        <Loading class="progress-loading" v-if="uploading"></Loading>
         <div class="total-progress progress"></div>
       </div>
     </div>
@@ -64,6 +67,10 @@ const isChunk = ref(true);
 const fileHash = ref('');
 // 是否显示错误信息
 const showError = ref(false);
+// 文件分片合并结果
+const mergeResult = ref(false);
+// 文件上传loading
+const uploading = ref(false);
 
 const uploadModeChange = checked => {
   isChunk.value = checked;
@@ -109,10 +116,14 @@ const calculateProgress = () => {
     // 计算整个文件上传进度
     totalPorgress.style.width = `${(uploadedSize / file.value.size) * 100}%`;
 
-    if (
-      fileChunkList.value.every(v => ['success', 'error'].includes(v.status))
-    ) {
+    if (mergeResult.value) {
       totalPorgress.classList.add('success');
+    }
+
+    if (
+      fileChunkList.value.every(v => ['success', 'error'].includes(v.status)) &&
+      mergeResult.value
+    ) {
       window.cancelAnimationFrame(requestId);
     }
   };
@@ -200,6 +211,8 @@ const customRequest = () => {
     return;
   }
 
+  uploading.value = true;
+
   fileChunkHash(file.value)
     .then(result => {
       fileHash.value = result;
@@ -235,7 +248,10 @@ const customRequest = () => {
 
         calculateProgress();
         asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
-          mergeFileChunk();
+          mergeFileChunk().then(() => {
+            mergeResult.value = true;
+            uploading.value = false;
+          });
         });
       } else {
         calculateProgress();
@@ -257,7 +273,7 @@ const mergeFileChunk = () => {
     fileName: file.value.name,
     chunkSize: CHUNK_SIZE
   };
-  request({
+  return request({
     url: 'http://localhost:3001/mergeFile',
     data: JSON.stringify(params),
     headers: {
@@ -418,8 +434,17 @@ function isEmptyObject(obj) {
       border: 2px solid #999;
       border-radius: 4px;
       margin-right: 4px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
 
       .total-progress {
+        position: absolute;
+        left: 0px;
+      }
+      .progress-loading {
+        z-index: 10;
       }
     }
   }
