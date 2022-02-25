@@ -1,6 +1,6 @@
 # file-upload
 
-Vue3 + Node 实现大文件上传
+Vue3 + Node 实现文件分片上传
 
 
 
