@@ -7,9 +7,13 @@
     >
       <a-button>Upload</a-button>
     </a-upload>
-    <a class="start-upload-button" @click="customRequest" :disabled="uploading"
-      >开始上传</a
+    <a
+      class="start-upload-button"
+      @click="customRequest"
+      v-if="uploadInfo.status !== 'uploading'"
     >
+      开始上传
+    </a>
     <div class="err-tip" v-if="showError">请先选择上传文件！</div>
     <div class="file-upload-mode">
       是否切片上传：
@@ -41,7 +45,10 @@
     <div class="file-upload-container flex-container">
       文件上传进度：
       <div class="file-upload-progress">
-        <Loading class="progress-loading" v-if="uploading"></Loading>
+        <Loading
+          class="progress-loading"
+          v-if="uploadInfo.status === 'uploading'"
+        ></Loading>
         <div class="total-progress progress"></div>
       </div>
     </div>
@@ -61,16 +68,14 @@ const CHUNK_SIZE = 1024 * 100;
 const fileChunkList = ref([]);
 // 文件信息
 const file = ref({});
-// 是否分钱上传
+// 是否分片上传
 const isChunk = ref(true);
 // 文件md5值
 const fileHash = ref('');
 // 是否显示错误信息
 const showError = ref(false);
-// 文件分片合并结果
-const mergeResult = ref(false);
-// 文件上传loading
-const uploading = ref(false);
+// 文件上传信息
+const uploadInfo = ref({});
 
 const uploadModeChange = checked => {
   isChunk.value = checked;
@@ -83,7 +88,11 @@ const beforeUpload = () => {
 const uploadFileChange = fileInfo => {
   showError.value = false;
   file.value = fileInfo.file;
+  // 清空文件分片
+  fileChunkList.value = [];
   fileChunk(file.value);
+
+  uploadInfo.value = { progress: 0, status: 'init' };
 };
 
 // 更新文件分片进度条
@@ -93,36 +102,36 @@ const calculateProgress = () => {
 
   const animation = () => {
     const requestId = window.requestAnimationFrame(animation);
-    // 文件已上传大小
-    let uploadedSize = 0;
 
-    // 处理分片上传进度条
-    fileChunkList.value
-      .filter(v => v.progress !== 0)
-      .map(v => {
-        ele[v.chunkIndex].style.width = `${v.progress}%`;
-        if (v.status === 'success') {
-          ele[v.chunkIndex].classList.add('success');
-          // ele[v.chunkIndex].style.backgroundColor = '#52C41A';
-        }
-        if (v.status === 'error') {
-          ele[v.chunkIndex].classList.add('error');
-          // ele[v.chunkIndex].style.backgroundColor = '#f5222d';
-        }
+    if (isChunk.value) {
+      // 文件已上传大小
+      let uploadedSize = 0;
 
-        uploadedSize = uploadedSize + (v.chunk.size * v.progress) / 100;
-      });
+      // 处理分片上传进度条
+      fileChunkList.value
+        .filter(v => v.progress !== 0)
+        .map(v => {
+          ele[v.chunkIndex].style.width = `${v.progress}%`;
+          if (v.status === 'success') {
+            ele[v.chunkIndex].classList.add('success');
+          }
+          if (v.status === 'error') {
+            ele[v.chunkIndex].classList.add('error');
+          }
 
-    // 计算整个文件上传进度
-    totalPorgress.style.width = `${(uploadedSize / file.value.size) * 100}%`;
+          uploadedSize = uploadedSize + (v.chunk.size * v.progress) / 100;
+        });
 
-    if (mergeResult.value) {
-      totalPorgress.classList.add('success');
+      // 计算整个文件上传进度
+      uploadInfo.value.progress = (uploadedSize / file.value.size) * 100;
     }
+
+    totalPorgress.style.width = `${uploadInfo.value.progress}%`;
+    totalPorgress.classList.add(uploadInfo.value.status);
 
     if (
       fileChunkList.value.every(v => ['success', 'error'].includes(v.status)) &&
-      mergeResult.value
+      uploadInfo.value.status === 'success'
     ) {
       window.cancelAnimationFrame(requestId);
     }
@@ -211,8 +220,6 @@ const customRequest = () => {
     return;
   }
 
-  uploading.value = true;
-
   fileChunkHash(file.value)
     .then(result => {
       fileHash.value = result;
@@ -248,10 +255,13 @@ const customRequest = () => {
 
         calculateProgress();
         asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
-          mergeFileChunk().then(() => {
-            mergeResult.value = true;
-            uploading.value = false;
-          });
+          mergeFileChunk()
+            .then(() => {
+              uploadInfo.value.status = 'success';
+            })
+            .catch(() => {
+              uploadInfo.value.status = 'error';
+            });
         });
       } else {
         calculateProgress();
@@ -300,6 +310,7 @@ const handlerChunkUpload = record => {
     onProgress: saveChunkProgress(record),
     onloadstart: () => {
       record.status = 'start';
+      uploadInfo.value.status = 'uploading';
     },
     onload: () => {
       record.status = 'success';
@@ -328,7 +339,19 @@ const handerFileUpload = (file, fileHash) => {
   formData.append('fileHash', fileHash);
   return request({
     url: 'http://localhost:3001/upload',
-    data: formData
+    data: formData,
+    onProgress: e => {
+      uploadInfo.value.progress = (e.loaded / e.total) * 100;
+    },
+    onloadstart: () => {
+      uploadInfo.value.status = 'uploading';
+    },
+    onload: () => {
+      uploadInfo.value.status = 'success';
+    },
+    onerror: () => {
+      uploadInfo.value.status = 'error';
+    }
   });
 };
 
