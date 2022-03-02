@@ -15,31 +15,18 @@
       开始上传
     </a>
     <div class="err-tip" v-if="showError">请先选择上传文件！</div>
-    <div class="file-upload-mode">
-      是否切片上传：
-      <a-switch
-        class="file-upload-mode-switch"
-        size="small"
-        :checked="isChunk"
-        @change="uploadModeChange"
-      />
+    <div class="file-upload-setting">
+      抽样计算md5：
+      <a-switch class="switch" size="small" v-model:checked="isSampling" />
     </div>
-    <div
-      class="file-chunk-upload-container flex-container"
-      v-if="isChunk && !isEmptyObject(file)"
-    >
-      <div class="file-chunk-label">切片上传进度：</div>
-      <div class="file-chunk-list">
-        <div
-          class="file-chunk-item"
-          v-for="(item, index) in fileChunkList"
-          :key="index"
-        >
-          <div class="chunk-progress progress"></div>
-          <Loading
-            v-show="['start', 'uploading'].includes(item.status)"
-          ></Loading>
-        </div>
+    <div class="file-upload-setting">
+      是否切片上传：
+      <a-switch class="switch" size="small" v-model:checked="isChunk" />
+    </div>
+    <div class="file-upload-container flex-container">
+      md5计算进度：
+      <div class="file-upload-progress">
+        <div class="progress-slider"></div>
       </div>
     </div>
     <div class="file-upload-container flex-container">
@@ -49,7 +36,25 @@
           class="progress-loading"
           v-if="uploadInfo.status === 'uploading'"
         ></Loading>
-        <div class="total-progress progress"></div>
+        <div class="total-progress progress-slider"></div>
+      </div>
+    </div>
+    <div
+      class="file-chunk-upload-container flex-container"
+      v-if="isChunk && fileChunkList.length"
+    >
+      <div class="file-chunk-label">切片上传进度：</div>
+      <div class="file-chunk-list">
+        <div
+          class="file-chunk-item"
+          v-for="(item, index) in fileChunkList"
+          :key="index"
+        >
+          <div class="chunk-progress progress-slider"></div>
+          <Loading
+            v-show="['start', 'uploading'].includes(item.status)"
+          ></Loading>
+        </div>
       </div>
     </div>
   </div>
@@ -63,34 +68,44 @@ import Loading from './components/Loading.vue';
 import { str2ab } from './utils/string';
 
 // 切片大小
-const CHUNK_SIZE = 1024 * 100;
+const CHUNK_SIZE = 1024 * 100; // 100k
 // 文件分片数组
 const fileChunkList = ref([]);
 // 文件信息
 const file = ref({});
 // 是否分片上传
 const isChunk = ref(true);
+// 是否抽样计算md5
+const isSampling = ref(true);
 // 文件md5值
 const fileHash = ref('');
 // 是否显示错误信息
 const showError = ref(false);
 // 文件上传信息
 const uploadInfo = ref({});
+// 计算文件md5信息
+const md5Info = ref({});
 
-const uploadModeChange = checked => {
-  isChunk.value = checked;
-};
-
-const beforeUpload = () => {
+const beforeUpload = file => {
+  console.log(file);
   return false;
 };
 
 const uploadFileChange = fileInfo => {
   showError.value = false;
   file.value = fileInfo.file;
+
   // 清空文件分片
   fileChunkList.value = [];
-  fileChunk(file.value);
+
+  // 当抽样计算文件md5或分片上传时才切分文件
+  if (isSampling.value || isChunk.value) {
+    fileChunk(file.value);
+  }
+
+  calculateFileHash(file.value).then(result => {
+    console.log(result);
+  });
 
   uploadInfo.value = { progress: 0, status: 'init' };
 };
@@ -158,43 +173,55 @@ const fileChunk = file => {
   console.log(fileChunkList.value);
 };
 
-/**
- * 计算文件切片hash值
- */
-const fileChunkHash = file => {
+// 计算文件md5
+const calculateFileHash = file => {
   return new Promise((resolve, reject) => {
     let cur = 0;
     let fileReader = new FileReader();
     let spark = new sparkMD5.ArrayBuffer();
 
-    // 计算文件名hash值，防止文件相同文件名不同的情况
     str2ab(file.name, result => {
       spark.append(result);
     });
 
     fileReader.onload = e => {
       spark.append(e.target.result);
-      if (cur <= fileChunkList.value.length - 1) {
-        calculateChunk();
-      } else {
-        resolve(spark.end());
-      }
-    };
 
-    fileReader.onprogress = e => {
-      console.log(e);
+      if (!isSampling.value || cur > fileChunkList.value.length - 1) {
+        resolve(spark.end());
+        return;
+      }
+      calculate();
     };
 
     fileReader.onerror = () => {
       reject(new Error('文件读取失败'));
     };
 
-    const calculateChunk = () => {
-      fileReader.readAsArrayBuffer(fileChunkList.value[cur].chunk);
-      cur++;
+    fileReader.onprogress = e => {
+      console.log(e);
     };
 
-    calculateChunk();
+    const calculate = () => {
+      if (isSampling.value) {
+        if (cur === 0 || cur === fileChunkList.value.length - 1) {
+          // 取文件切片列表首尾完整切片
+          fileReader.readAsArrayBuffer(fileChunkList.value[cur].chunk);
+        } else {
+          // 中间切片首尾各取10个字节
+          let blob = new Blob([
+            fileChunkList.value[cur].chunk.slice(0, 10),
+            fileChunkList.value[cur].chunk.slice(-10)
+          ]);
+          fileReader.readAsArrayBuffer(blob);
+        }
+        cur++;
+      } else {
+        fileReader.readAsArrayBuffer(file);
+      }
+    };
+
+    calculate();
   });
 };
 
@@ -215,12 +242,12 @@ const checkFileStatus = fileHash => {
 };
 
 const customRequest = () => {
-  if (isEmptyObject(file.value)) {
+  if (!file.value.name) {
     showError.value = true;
     return;
   }
 
-  fileChunkHash(file.value)
+  calculateFileHash(file.value)
     .then(result => {
       fileHash.value = result;
       return checkFileStatus(result);
@@ -231,6 +258,10 @@ const customRequest = () => {
 
       // 文件已上传
       if (fileStatus.result.fileExists) {
+        fileChunkList.value.forEach(v => {
+          v.progress = 100;
+          v.status = 'success';
+        });
         return fileStatus.result.url;
       }
 
@@ -321,6 +352,9 @@ const handlerChunkUpload = record => {
   });
 };
 
+/**
+ * 保存分片上传进度
+ */
 const saveChunkProgress = chunkRecord => {
   return e => {
     chunkRecord.status = 'uploading';
@@ -394,16 +428,6 @@ function asyncPool(poolLimit, array, hander) {
       return Promise.all(promises);
     });
 }
-
-/**
- * 判断是否为空对象
- */
-function isEmptyObject(obj) {
-  if (Object.prototype.toString.call({}) !== '[object Object]') {
-    return false;
-  }
-  return Object.keys(obj).length ? false : true;
-}
 </script>
 
 <style lang="less" scoped>
@@ -420,12 +444,8 @@ function isEmptyObject(obj) {
     color: red;
     margin-top: 4px;
   }
-  .file-upload-mode {
+  .file-upload-setting {
     margin: 8px 0px;
-
-    .file-upload-mode-switch {
-      margin-top: -2px;
-    }
   }
   .file-chunk-upload-container {
     .file-chunk-list {
@@ -474,9 +494,13 @@ function isEmptyObject(obj) {
   .flex-container {
     display: flex;
     margin: 8px 0px;
+
+    .switch {
+      margin-top: -2px;
+    }
   }
 }
-.progress {
+.progress-slider {
   height: 100%;
   width: 0;
   background-color: #1890ff;
