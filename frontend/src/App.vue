@@ -10,6 +10,7 @@
     <a
       class="start-upload-button"
       @click="customRequest"
+      disabled
       v-if="uploadInfo.status !== 'uploading'"
     >
       开始上传
@@ -26,7 +27,11 @@
     <div class="file-upload-container flex-container">
       md5计算进度：
       <div class="file-upload-progress">
-        <div class="progress-slider"></div>
+        <Loading
+          class="progress-loading"
+          v-if="md5Info.status === 'loading'"
+        ></Loading>
+        <div class="md5-progress progress-slider"></div>
       </div>
     </div>
     <div class="file-upload-container flex-container">
@@ -44,7 +49,7 @@
       v-if="isChunk && fileChunkList.length"
     >
       <div class="file-chunk-label">切片上传进度：</div>
-      <div class="file-chunk-list">
+      <!-- <div class="file-chunk-list">
         <div
           class="file-chunk-item"
           v-for="(item, index) in fileChunkList"
@@ -55,7 +60,7 @@
             v-show="['start', 'uploading'].includes(item.status)"
           ></Loading>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
@@ -69,6 +74,8 @@ import { str2ab } from './utils/string';
 
 // 切片大小
 const CHUNK_SIZE = 1024 * 100; // 100k
+// 当抽样计算文件md5时，从每个分片中截取信息大小
+const SAMPLING_SIZE = 10; // 10字节
 // 文件分片数组
 const fileChunkList = ref([]);
 // 文件信息
@@ -82,9 +89,13 @@ const fileHash = ref('');
 // 是否显示错误信息
 const showError = ref(false);
 // 文件上传信息
-const uploadInfo = ref({});
+const uploadInfo = ref({ progress: 0, status: 'init' });
 // 计算文件md5信息
-const md5Info = ref({});
+const md5Info = ref({
+  total: 0,
+  progress: 0,
+  status: 'init'
+});
 
 const beforeUpload = file => {
   console.log(file);
@@ -98,22 +109,14 @@ const uploadFileChange = fileInfo => {
   // 清空文件分片
   fileChunkList.value = [];
 
-  // 当抽样计算文件md5或分片上传时才切分文件
-  if (isSampling.value || isChunk.value) {
-    fileChunk(file.value);
-  }
-
-  calculateFileHash(file.value).then(result => {
-    console.log(result);
-  });
-
   uploadInfo.value = { progress: 0, status: 'init' };
 };
 
-// 更新文件分片进度条
+// 更新进度条
 const calculateProgress = () => {
   const ele = document.getElementsByClassName('chunk-progress');
   const totalPorgress = document.getElementsByClassName('total-progress')[0];
+  const md5Progress = document.getElementsByClassName('md5-progress')[0];
 
   const animation = () => {
     const requestId = window.requestAnimationFrame(animation);
@@ -144,9 +147,13 @@ const calculateProgress = () => {
     totalPorgress.style.width = `${uploadInfo.value.progress}%`;
     totalPorgress.classList.add(uploadInfo.value.status);
 
+    md5Progress.style.width = `${md5Info.value.progress}%`;
+    md5Progress.classList.add(md5Info.value.status);
+
     if (
       fileChunkList.value.every(v => ['success', 'error'].includes(v.status)) &&
-      uploadInfo.value.status === 'success'
+      uploadInfo.value.status === 'success' &&
+      md5Info.value.status === 'success'
     ) {
       window.cancelAnimationFrame(requestId);
     }
@@ -179,6 +186,7 @@ const calculateFileHash = file => {
     let cur = 0;
     let fileReader = new FileReader();
     let spark = new sparkMD5.ArrayBuffer();
+    let finishedSize = new Map();
 
     str2ab(file.name, result => {
       spark.append(result);
@@ -195,11 +203,25 @@ const calculateFileHash = file => {
     };
 
     fileReader.onerror = () => {
+      md5Info.value.status = 'error';
       reject(new Error('文件读取失败'));
     };
 
     fileReader.onprogress = e => {
       console.log(e);
+      finishedSize.set(cur, e.loaded);
+
+      let progress =
+        (Array.from(finishedSize.values()).reduce((pre, cur) => pre + cur, 0) /
+          md5Info.value.total) *
+        100;
+      md5Info.value = {
+        ...md5Info.value,
+        ...{
+          progress: progress,
+          status: progress === 100 ? 'success' : 'loading'
+        }
+      };
     };
 
     const calculate = () => {
@@ -210,8 +232,8 @@ const calculateFileHash = file => {
         } else {
           // 中间切片首尾各取10个字节
           let blob = new Blob([
-            fileChunkList.value[cur].chunk.slice(0, 10),
-            fileChunkList.value[cur].chunk.slice(-10)
+            fileChunkList.value[cur].chunk.slice(0, SAMPLING_SIZE),
+            fileChunkList.value[cur].chunk.slice(-SAMPLING_SIZE)
           ]);
           fileReader.readAsArrayBuffer(blob);
         }
@@ -246,6 +268,24 @@ const customRequest = () => {
     showError.value = true;
     return;
   }
+
+  // 当抽样计算文件md5或分片上传时才切分文件
+  if (isSampling.value || isChunk.value) {
+    fileChunk(file.value);
+  }
+
+  // 需要计算md5的字节数
+  if (isSampling.value && fileChunkList.value.length > 2) {
+    md5Info.value.total =
+      fileChunkList.value[fileChunkList.value.length - 1].chunk.size +
+      CHUNK_SIZE +
+      (fileChunkList.value.length - 2) * 2 * SAMPLING_SIZE;
+  } else {
+    md5Info.value.total = file.value.size;
+  }
+
+  // 处理进度条
+  calculateProgress();
 
   calculateFileHash(file.value)
     .then(result => {
@@ -284,7 +324,6 @@ const customRequest = () => {
           noExistChunkList = fileChunkList.value;
         }
 
-        calculateProgress();
         asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
           mergeFileChunk()
             .then(() => {
@@ -295,7 +334,6 @@ const customRequest = () => {
             });
         });
       } else {
-        calculateProgress();
         handerFileUpload(file.value, fileHash.value);
       }
     })
@@ -482,7 +520,8 @@ function asyncPool(poolLimit, array, hander) {
       align-items: center;
       position: relative;
 
-      .total-progress {
+      .total-progress,
+      .md5-progress {
         position: absolute;
         left: 0px;
       }
