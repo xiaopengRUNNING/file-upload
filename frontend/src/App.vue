@@ -7,12 +7,7 @@
     >
       <a-button>Upload</a-button>
     </a-upload>
-    <a
-      class="start-upload-button"
-      @click="customRequest"
-      disabled
-      v-if="uploadInfo.status !== 'uploading'"
-    >
+    <a class="start-upload-button" @click="customRequest" v-if="!loading">
       开始上传
     </a>
     <div class="err-tip" v-if="showError">请先选择上传文件！</div>
@@ -49,7 +44,7 @@
       v-if="isChunk && fileChunkList.length"
     >
       <div class="file-chunk-label">切片上传进度：</div>
-      <!-- <div class="file-chunk-list">
+      <div class="file-chunk-list">
         <div
           class="file-chunk-item"
           v-for="(item, index) in fileChunkList"
@@ -60,7 +55,7 @@
             v-show="['start', 'uploading'].includes(item.status)"
           ></Loading>
         </div>
-      </div> -->
+      </div>
     </div>
   </div>
 </template>
@@ -72,6 +67,7 @@ import request from './utils/request';
 import Loading from './components/Loading.vue';
 import { str2ab } from './utils/string';
 
+const loading = ref(false);
 // 切片大小
 const CHUNK_SIZE = 1024 * 100; // 100k
 // 当抽样计算文件md5时，从每个分片中截取信息大小
@@ -254,6 +250,7 @@ const calculateFileHash = file => {
  */
 const checkFileStatus = fileHash => {
   const params = { fileHash: fileHash, fileName: file.value.name };
+  uploadInfo.value.status = 'uploading';
   return request({
     url: 'http://localhost:3001/checkFileStatus',
     data: JSON.stringify(params),
@@ -269,6 +266,7 @@ const customRequest = () => {
     return;
   }
 
+  loading.value = true;
   // 当抽样计算文件md5或分片上传时才切分文件
   if (isSampling.value || isChunk.value) {
     fileChunk(file.value);
@@ -331,6 +329,9 @@ const customRequest = () => {
             })
             .catch(() => {
               uploadInfo.value.status = 'error';
+            })
+            .finally(() => {
+              loading.value = false;
             });
         });
       } else {
@@ -340,6 +341,9 @@ const customRequest = () => {
     .catch(err => {
       console.error(err);
       return false;
+    })
+    .finally(() => {
+      loading.value = false;
     });
 };
 
