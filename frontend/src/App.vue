@@ -100,7 +100,7 @@ const uploadFileChange = fileInfo => {
 
 // 更新进度条
 const calculateProgress = () => {
-  const ele = document.getElementsByClassName('chunk-progress');
+  const chunkProgressList = document.getElementsByClassName('chunk-progress');
   const totalPorgress = document.getElementsByClassName('total-progress')[0];
   const md5Progress = document.getElementsByClassName('md5-progress')[0];
 
@@ -115,12 +115,12 @@ const calculateProgress = () => {
       fileChunkList.value
         .filter(v => v.progress !== 0)
         .map(v => {
-          ele[v.chunkIndex].style.width = `${v.progress}%`;
+          chunkProgressList[v.chunkIndex].style.width = `${v.progress}%`;
           if (v.status === 'success') {
-            ele[v.chunkIndex].classList.add('success');
+            chunkProgressList[v.chunkIndex].classList.add('success');
           }
           if (v.status === 'error') {
-            ele[v.chunkIndex].classList.add('error');
+            chunkProgressList[v.chunkIndex].classList.add('error');
           }
 
           uploadedSize = uploadedSize + (v.chunk.size * v.progress) / 100;
