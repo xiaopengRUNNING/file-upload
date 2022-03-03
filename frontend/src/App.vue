@@ -19,42 +19,32 @@
       是否切片上传：
       <a-switch class="switch" size="small" v-model:checked="isChunk" />
     </div>
-    <div class="file-upload-container flex-container">
+    <div class="flex-container">
       md5计算进度：
-      <div class="file-upload-progress">
-        <Loading
-          class="progress-loading"
-          v-if="md5Info.status === 'loading'"
-        ></Loading>
-        <div class="md5-progress progress-slider"></div>
-      </div>
+      <Progress
+        class="total-progress-container"
+        progressClassName="md5-progress"
+        :loading="md5Info.status === 'loading'"
+      ></Progress>
     </div>
-    <div class="file-upload-container flex-container">
+    <div class="flex-container">
       文件上传进度：
-      <div class="file-upload-progress">
-        <Loading
-          class="progress-loading"
-          v-if="uploadInfo.status === 'uploading'"
-        ></Loading>
-        <div class="total-progress progress-slider"></div>
-      </div>
+      <Progress
+        class="total-progress-container"
+        progressClassName="total-progress"
+        :loading="uploadInfo.status === 'uploading'"
+      ></Progress>
     </div>
-    <div
-      class="file-chunk-upload-container flex-container"
-      v-if="isChunk && fileChunkList.length"
-    >
+    <div class="flex-container" v-if="isChunk && fileChunkList.length">
       <div class="file-chunk-label">切片上传进度：</div>
       <div class="file-chunk-list">
-        <div
-          class="file-chunk-item"
+        <Progress
           v-for="(item, index) in fileChunkList"
           :key="index"
-        >
-          <div class="chunk-progress progress-slider"></div>
-          <Loading
-            v-show="['start', 'uploading'].includes(item.status)"
-          ></Loading>
-        </div>
+          class="chunk-progress-container"
+          progressClassName="chunk-progress"
+          :loading="['start', 'uploading'].includes(item.status)"
+        ></Progress>
       </div>
     </div>
   </div>
@@ -64,7 +54,7 @@
 import { ref } from '@vue/reactivity';
 import sparkMD5 from 'spark-md5';
 import request from './utils/request';
-import Loading from './components/Loading.vue';
+import Progress from './components/Progress.vue';
 import { str2ab } from './utils/string';
 
 const loading = ref(false);
@@ -489,51 +479,6 @@ function asyncPool(poolLimit, array, hander) {
   .file-upload-setting {
     margin: 8px 0px;
   }
-  .file-chunk-upload-container {
-    .file-chunk-list {
-      flex: 1;
-      display: flex;
-      flex-wrap: wrap;
-      .file-chunk-item {
-        width: 30px;
-        height: 30px;
-        border: 2px solid #999;
-        border-radius: 4px;
-        margin: 0px 4px 4px 0px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        position: relative;
-
-        .chunk-progress {
-          position: absolute;
-          left: 0px;
-        }
-      }
-    }
-  }
-  .file-upload-container {
-    .file-upload-progress {
-      flex: 1;
-      height: 32px;
-      border: 2px solid #999;
-      border-radius: 4px;
-      margin-right: 4px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-
-      .total-progress,
-      .md5-progress {
-        position: absolute;
-        left: 0px;
-      }
-      .progress-loading {
-        z-index: 10;
-      }
-    }
-  }
   .flex-container {
     display: flex;
     margin: 8px 0px;
@@ -541,18 +486,22 @@ function asyncPool(poolLimit, array, hander) {
     .switch {
       margin-top: -2px;
     }
+    .file-chunk-list {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+    }
   }
 }
-.progress-slider {
-  height: 100%;
-  width: 0;
-  background-color: #1890ff;
-  &.success {
-    background-color: #52c41a;
-  }
-  &.error {
-    background-color: #f5222d;
-  }
+.total-progress-container {
+  flex: 1;
+  height: 32px;
+  margin-right: 4px;
+}
+.chunk-progress-container {
+  width: 30px;
+  height: 30px;
+  margin: 0px 4px 4px 0px;
 }
 </style>
 
