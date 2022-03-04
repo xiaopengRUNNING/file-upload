@@ -18,15 +18,22 @@ export default function request({
     xhr.onloadstart = onloadstart;
     xhr.upload.onprogress = onProgress;
     xhr.send(data);
-    xhr.onload = e => {
-      onload();
-      resolve({
-        data: e.target.response
-      });
-    };
     xhr.onerror = err => {
       onerror();
       reject(err);
+    };
+    xhr.onload = e => {
+      switch (e.currentTarget.status) {
+        case 500:
+          reject('报错了');
+          break;
+        default:
+          onload();
+          resolve({
+            data: JSON.parse(e.target.response)
+          });
+          break;
+      }
     };
   });
 }
