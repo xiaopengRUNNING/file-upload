@@ -80,7 +80,14 @@ app.post('/chunkUpload', (req, res) => {
 
     multiparty.parse(req, async (err, fields, files) => {
       if (err) {
-        return reject(err);
+        reject(err);
+        return;
+      }
+
+      // 模拟分片上传报错
+      if (Math.random() > 0.5) {
+        reject(new Error('测试报错'));
+        return;
       }
 
       // 将文件移动到最终目录
@@ -104,13 +111,15 @@ app.post('/chunkUpload', (req, res) => {
             return: null,
             success: true
           });
+          return;
         }
       );
     });
   }).catch(err => {
+    res.statusCode = 500;
     res.json({
       code: 500,
-      messgae: `操作失败，${err}`,
+      messgae: `操作失败`,
       result: null,
       success: false
     });
