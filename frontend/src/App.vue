@@ -11,6 +11,11 @@
       开始上传
     </a>
     <div class="err-tip" v-if="showError">请先选择上传文件！</div>
+    <div class="file-info" v-if="file.name">
+      <FileOutlined />
+      <div class="file-name">{{ file.name }}</div>
+      <CloseCircleOutlined />
+    </div>
     <div class="file-upload-setting">
       抽样计算md5：
       <a-switch class="switch" size="small" v-model:checked="isSampling" />
@@ -33,7 +38,9 @@
         class="total-progress-container"
         progressClassName="total-progress"
         :loading="uploadInfo.status === 'uploading'"
-      ></Progress>
+      >
+        test
+      </Progress>
     </div>
     <div class="flex-container" v-if="isChunk && fileChunkList.length">
       <div class="file-chunk-label">切片上传进度：</div>
@@ -55,6 +62,7 @@ import { ref } from '@vue/reactivity';
 import sparkMD5 from 'spark-md5';
 import request from './utils/request';
 import Progress from './components/Progress.vue';
+import { FileOutlined, CloseCircleOutlined } from '@ant-design/icons-vue';
 import { str2ab } from './utils/string';
 
 const loading = ref(false);
@@ -194,7 +202,6 @@ const calculateFileHash = file => {
     };
 
     fileReader.onprogress = e => {
-      console.log(e);
       finishedSize.set(cur, e.loaded);
 
       let progress =
@@ -281,7 +288,7 @@ const customRequest = () => {
       return checkFileStatus(result);
     })
     .then(result => {
-      let fileStatus = JSON.parse(result.data);
+      let fileStatus = result.data;
       let uploadedChunkIndex = fileStatus.result.fileChunk;
 
       // 文件已上传
@@ -475,6 +482,28 @@ function asyncPool(poolLimit, array, hander) {
   .err-tip {
     color: red;
     margin-top: 4px;
+  }
+  .file-info {
+    height: 22px;
+    width: 100%;
+    margin-top: 4px;
+    padding: 0 12px 0 4px;
+    display: flex;
+    align-items: center;
+
+    .file-name {
+      flex: 1;
+      width: 0;
+      word-break: break-all;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin: 0 12px 0 8px;
+    }
+
+    &:hover {
+      background: #f5f5f5;
+    }
   }
   .file-upload-setting {
     margin: 8px 0px;
