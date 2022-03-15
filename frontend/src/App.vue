@@ -14,7 +14,7 @@
     <div class="file-info" v-if="file.name">
       <FileOutlined />
       <div class="file-name">{{ file.name }}</div>
-      <CloseCircleOutlined />
+      <CloseCircleOutlined @click="deleteFile" />
     </div>
     <div class="file-upload-setting">
       抽样计算md5：
@@ -90,6 +90,10 @@ const md5Info = ref({
   progress: 0,
   status: 'init'
 });
+
+const deleteFile = () => {
+  file.value = {};
+};
 
 const beforeUpload = file => {
   console.log(file);
