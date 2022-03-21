@@ -39,7 +39,6 @@
         progressClassName="total-progress"
         :loading="uploadInfo.status === 'uploading'"
       >
-        test
       </Progress>
     </div>
     <div class="flex-container" v-if="isChunk && fileChunkList.length">
@@ -51,6 +50,7 @@
           class="chunk-progress-container"
           progressClassName="chunk-progress"
           :loading="['start', 'uploading'].includes(item.status)"
+          :text="item.errTimes"
         ></Progress>
       </div>
     </div>
@@ -171,7 +171,8 @@ const fileChunk = file => {
       chunkIndex: cur / CHUNK_SIZE,
       // 'init', 'start', 'uploading', 'error', 'success'
       status: 'init',
-      progress: 0
+      progress: 0,
+      errTimes: 0
     });
     cur += CHUNK_SIZE;
   }
@@ -323,28 +324,22 @@ const customRequest = () => {
           noExistChunkList = fileChunkList.value;
         }
 
-        asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
+        return asyncPool(4, noExistChunkList, handlerChunkUpload).then(() => {
           mergeFileChunk()
             .then(() => {
               uploadInfo.value.status = 'success';
             })
             .catch(() => {
               uploadInfo.value.status = 'error';
-            })
-            .finally(() => {
-              loading.value = false;
             });
         });
       } else {
-        handerFileUpload(file.value, fileHash.value);
+        return handerFileUpload(file.value, fileHash.value);
       }
     })
     .catch(err => {
       console.error(err);
       return false;
-    })
-    .finally(() => {
-      loading.value = false;
     });
 };
 
@@ -383,7 +378,6 @@ const handlerChunkUpload = record => {
     data: formData,
     onProgress: saveChunkProgress(record),
     onloadstart: () => {
-      record.status = 'start';
       uploadInfo.value.status = 'uploading';
     },
     onload: () => {
@@ -440,6 +434,59 @@ const handerFileUpload = (file, fileHash) => {
  * @param {Function} hander
  */
 function asyncPool(poolLimit, array, hander) {
+  const retryTimes = 3;
+  let freeCount = poolLimit;
+  let finishedCount = 0;
+
+  return new Promise((resolve, reject) => {
+    const start = () => {
+      while (finishedCount < array.length && freeCount > 0) {
+        freeCount--;
+        let idx = array.findIndex(
+          v =>
+            v.status === 'init' ||
+            (v.status === 'error' && v.errTimes <= retryTimes)
+        );
+        array[idx].status = 'start';
+        hander(array[idx])
+          .then(() => {
+            finishedCount++;
+            freeCount++;
+            start();
+
+            if (finishedCount === array.length) {
+              resolve();
+            }
+          })
+          .catch(() => {
+            array[idx].status = 'error';
+            array[idx].errTimes++;
+
+            freeCount++;
+            if (array[idx].errTimes >= retryTimes) {
+              freeCount = 0;
+              reject(new Error('有切片三次上传都失败啦!'));
+            } else {
+              start();
+            }
+          });
+      }
+    };
+
+    start();
+  });
+}
+
+/**
+ * 限制异步请求最大并发数
+ *
+ * @param {Number} poolLimit
+ * @param {Array} array
+ * @param {Function} hander
+ *
+ * 缺陷：中途一个请求失败会导致后续的所有的请求不会发送
+ */
+function asyncPool1(poolLimit, array, hander) {
   let sequence = [].concat(array);
   let promises = sequence.splice(0, poolLimit).map((item, index) => {
     return hander(item).then(() => {
@@ -447,6 +494,7 @@ function asyncPool(poolLimit, array, hander) {
       return index;
     });
   });
+
   return sequence
     .reduce((aPromise, curr) => {
       return (
