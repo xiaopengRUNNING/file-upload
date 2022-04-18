@@ -447,29 +447,31 @@ function asyncPool(poolLimit, array, hander) {
             v.status === 'init' ||
             (v.status === 'error' && v.errTimes <= retryTimes)
         );
-        array[idx].status = 'start';
-        hander(array[idx])
-          .then(() => {
-            finishedCount++;
-            freeCount++;
-            start();
+        if (idx >= 0) {
+          array[idx].status = 'start';
+          hander(array[idx])
+            .then(() => {
+              array[idx].status = 'success';
+              finishedCount++;
+              freeCount++;
 
-            if (finishedCount === array.length) {
-              resolve();
-            }
-          })
-          .catch(() => {
-            array[idx].status = 'error';
-            array[idx].errTimes++;
+              if (finishedCount === array.length) {
+                resolve();
+              } else {
+                start();
+              }
+            })
+            .catch(() => {
+              freeCount++;
+              array[idx].status = 'error';
+              array[idx].errTimes++;
 
-            freeCount++;
-            if (array[idx].errTimes >= retryTimes) {
-              freeCount = 0;
-              reject(new Error('有切片三次上传都失败啦!'));
-            } else {
+              if (array[idx].errTimes > retryTimes) {
+                return reject(new Error('有切片三次上传都失败啦!'));
+              }
               start();
-            }
-          });
+            });
+        }
       }
     };
 

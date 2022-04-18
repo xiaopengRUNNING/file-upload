@@ -12,7 +12,7 @@ import { defineProps } from 'vue';
 const props = defineProps({
   progressClassName: String,
   loading: { type: Boolean, default: true },
-  text: String
+  text: Number
 });
 </script>
 
