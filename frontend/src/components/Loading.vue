@@ -15,7 +15,9 @@
   </div>
 </template>
 
-<style>
+<script setup></script>
+
+<style lang="less" scoped>
 .sk-fading-circle {
   width: 24px;
   height: 24px;

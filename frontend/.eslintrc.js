@@ -10,5 +10,11 @@ module.exports = {
     sourceType: 'module'
   },
   plugins: ['vue'],
-  rules: {}
-}
+  rules: {},
+  globals: {
+    defineProps: 'readonly',
+    defineEmits: 'readonly',
+    defineExpose: 'readonly',
+    withDefaults: 'readonly'
+  }
+};
