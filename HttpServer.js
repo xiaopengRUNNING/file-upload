@@ -8,7 +8,7 @@ import cors from 'cors';
 const app = express();
 
 const port = 3001;
-const UPLOAD_DIR = path.resolve('..', 'Upload');
+const UPLOAD_DIR = path.resolve('Upload');
 
 // 解决跨域问题
 app.use(cors());
